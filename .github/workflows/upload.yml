@@ -1,0 +1,49 @@
+name: Upload
+
+on:
+  repository_dispatch:
+    types: [upload]
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - run: |
+          sudo apt update
+          sudo apt install -y aria2
+
+      - run: pip install pyrogram tgcrypto requests
+
+      - env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          PIXELDRAIN_API: ${{ secrets.PIXELDRAIN_API }}
+          FILE_ID: ${{ github.event.client_payload.file_id }}
+          URL: ${{ github.event.client_payload.url }}
+          CHAT_ID: ${{ github.event.client_payload.chat_id }}
+          MSG_ID: ${{ github.event.client_payload.message_id }}
+        run: |
+          python << 'EOF'
+          import os, asyncio
+          from engine.kurigram import get_client
+          from engine.status import edit
+          from engine.downloader import download_url
+          from uploader.router import route
+
+          async def main():
+              edit(os.environ["CHAT_ID"], os.environ["MSG_ID"], "⬇️ Downloading...")
+              if os.environ.get("URL"):
+                  path = download_url(os.environ["URL"])
+              else:
+                  async with get_client() as app:
+                      path = await app.download_media(os.environ["FILE_ID"])
+
+              edit(os.environ["CHAT_ID"], os.environ["MSG_ID"], "⬆️ Uploading...")
+              link = route(path)
+              edit(os.environ["CHAT_ID"], os.environ["MSG_ID"], f"✅ Done\n{link}")
+
+          asyncio.run(main())
+          EOF
